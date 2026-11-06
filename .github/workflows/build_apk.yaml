@@ -6,11 +6,12 @@ on:
       platform:
         description: 'Target Architecture'
         required: true
-        default: 'android-arm64'
+        default: 'both'
         type: choice
         options:
-          - android-arm64
+          - both
           - android-arm
+          - android-arm64
       config:
         description: 'Build Configuration'
         required: true
@@ -25,6 +26,9 @@ on:
     paths:
       - 'third_party/blink/renderer/core/dom/document.cc'
       - 'third_party/blink/renderer/core/frame/csp/content_security_policy.cc'
+      - 'cobalt/shell/android/shell_apk/AndroidManifest.xml.jinja2'
+      - 'cobalt/android/apk/app/src/main/java/dev/cobalt/dial/DIALServer.java'
+      - 'cobalt/shell/android/java/res/**'
       - '.github/workflows/build_apk.yaml'
 
 permissions:
@@ -32,9 +36,13 @@ permissions:
 
 jobs:
   build-apk:
-    name: Build ${{ github.event.inputs.platform || 'android-arm64' }} (${{ github.event.inputs.config || 'gold' }})
+    name: Build ${{ matrix.platform }} (${{ github.event.inputs.config || 'gold' }})
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ (github.event.inputs.platform == 'android-arm' && fromJSON('["android-arm"]')) || (github.event.inputs.platform == 'android-arm64' && fromJSON('["android-arm64"]')) || fromJSON('["android-arm", "android-arm64"]') }}
 
     steps:
       - name: Free Disk Space
@@ -106,7 +114,7 @@ jobs:
         run: |
           export PATH="$GITHUB_WORKSPACE/depot_tools:$PATH"
           cd "$GITHUB_WORKSPACE/src"
-          PLATFORM="${{ github.event.inputs.platform || 'android-arm64' }}"
+          PLATFORM="${{ matrix.platform }}"
           CONFIG="${{ github.event.inputs.config || 'gold' }}"
           python3 cobalt/build/gn.py -p "$PLATFORM" -C "$CONFIG" --no-rbe
 
@@ -114,13 +122,13 @@ jobs:
         run: |
           export PATH="$GITHUB_WORKSPACE/depot_tools:$PATH"
           cd "$GITHUB_WORKSPACE/src"
-          PLATFORM="${{ github.event.inputs.platform || 'android-arm64' }}"
+          PLATFORM="${{ matrix.platform }}"
           CONFIG="${{ github.event.inputs.config || 'gold' }}"
           ninja -C "out/${PLATFORM}_${CONFIG}" cobalt_apk
 
       - name: Rename and Prepare APK Artifact
         run: |
-          PLATFORM="${{ github.event.inputs.platform || 'android-arm64' }}"
+          PLATFORM="${{ matrix.platform }}"
           CONFIG="${{ github.event.inputs.config || 'gold' }}"
           OUT_DIR="$GITHUB_WORKSPACE/src/out/${PLATFORM}_${CONFIG}/apks"
           mkdir -p "$GITHUB_WORKSPACE/dist"
@@ -135,7 +143,6 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: YouTube-${{ github.event.inputs.platform || 'android-arm64' }}-${{ github.event.inputs.config || 'gold' }}
+          name: YouTube-${{ matrix.platform }}-${{ github.event.inputs.config || 'gold' }}
           path: dist/*.apk
           if-no-files-found: error
-
