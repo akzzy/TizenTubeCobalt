@@ -1,0 +1,141 @@
+name: Build Cobalt Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Target Architecture'
+        required: true
+        default: 'android-arm64'
+        type: choice
+        options:
+          - android-arm64
+          - android-arm
+      config:
+        description: 'Build Configuration'
+        required: true
+        default: 'gold'
+        type: choice
+        options:
+          - gold
+          - qa
+  push:
+    branches:
+      - main
+    paths:
+      - 'third_party/blink/renderer/core/dom/document.cc'
+      - 'third_party/blink/renderer/core/frame/csp/content_security_policy.cc'
+      - '.github/workflows/build_apk.yaml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Build ${{ github.event.inputs.platform || 'android-arm64' }} (${{ github.event.inputs.config || 'gold' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Free Disk Space
+        run: |
+          echo "=== Disk space before cleanup ==="
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune -a --force || true
+          echo "=== Disk space after cleanup ==="
+          df -h
+
+      - name: Setup Swap
+        run: |
+          echo "Configuring 16GB swap file to prevent OOM during linking..."
+          sudo fallocate -l 16G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=16384
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
+
+      - name: Install System Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bison clang libasound2-dev libgles2-mesa-dev libglib2.0-dev \
+            libxcomposite-dev libxi-dev libxrender-dev nasm ninja-build \
+            python3-dev python3-pip python3-venv \
+            gcc-multilib g++-multilib libc6-dev-i386 \
+            openjdk-17-jdk git curl jq zstd
+
+      - name: Install Depot Tools
+        run: |
+          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git "$GITHUB_WORKSPACE/depot_tools"
+          echo "$GITHUB_WORKSPACE/depot_tools" >> $GITHUB_PATH
+          echo "DEPOT_TOOLS_UPDATE=0" >> $GITHUB_ENV
+          echo "DEPOT_TOOLS_REPORT_BUILD=0" >> $GITHUB_ENV
+          echo "DEPOT_TOOLS_COLLECT_METRICS=0" >> $GITHUB_ENV
+          echo "DEPOT_TOOLS_METRICS=0" >> $GITHUB_ENV
+
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          path: src
+          fetch-depth: 1
+
+      - name: Ensure Android Debug Keystore
+        run: |
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            mkdir -p "$HOME/.android"
+            keytool -genkey -v -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Setup gclient & Sync Hooks
+        run: |
+          export PATH="$GITHUB_WORKSPACE/depot_tools:$PATH"
+          cd "$GITHUB_WORKSPACE"
+          gclient config --name=src --unmanaged "${{ github.server_url }}/${{ github.repository }}"
+          echo "target_os=['android']" >> .gclient
+          gclient sync --verbose --shallow --no-history -D -f -R --nohooks --revision="${{ github.sha }}"
+          gclient runhooks --verbose
+
+      - name: Run GN
+        run: |
+          export PATH="$GITHUB_WORKSPACE/depot_tools:$PATH"
+          cd "$GITHUB_WORKSPACE/src"
+          PLATFORM="${{ github.event.inputs.platform || 'android-arm64' }}"
+          CONFIG="${{ github.event.inputs.config || 'gold' }}"
+          python3 cobalt/build/gn.py -p "$PLATFORM" -C "$CONFIG" --no-rbe
+
+      - name: Build Cobalt APK
+        run: |
+          export PATH="$GITHUB_WORKSPACE/depot_tools:$PATH"
+          cd "$GITHUB_WORKSPACE/src"
+          PLATFORM="${{ github.event.inputs.platform || 'android-arm64' }}"
+          CONFIG="${{ github.event.inputs.config || 'gold' }}"
+          ninja -C "out/${PLATFORM}_${CONFIG}" cobalt_apk
+
+      - name: Rename and Prepare APK Artifact
+        run: |
+          PLATFORM="${{ github.event.inputs.platform || 'android-arm64' }}"
+          CONFIG="${{ github.event.inputs.config || 'gold' }}"
+          OUT_DIR="$GITHUB_WORKSPACE/src/out/${PLATFORM}_${CONFIG}/apks"
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          if [ -f "$OUT_DIR/Cobalt.apk" ]; then
+            cp "$OUT_DIR/Cobalt.apk" "$GITHUB_WORKSPACE/dist/YouTube-${PLATFORM}-${CONFIG}.apk"
+          else
+            echo "Searching for built APKs..."
+            find "$GITHUB_WORKSPACE/src/out" -name "*.apk" -exec cp {} "$GITHUB_WORKSPACE/dist/" \;
+          fi
+          ls -la "$GITHUB_WORKSPACE/dist"
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YouTube-${{ github.event.inputs.platform || 'android-arm64' }}-${{ github.event.inputs.config || 'gold' }}
+          path: dist/*.apk
+          if-no-files-found: error
+

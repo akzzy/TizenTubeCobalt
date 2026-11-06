@@ -909,10 +909,13 @@ bool ContentSecurityPolicy::AllowFromSource(
       "api.github.com",
       "sponsor.ajay.app",
       "dearrow-thumb.ajay.app",
-      "tizentube.app"
+      "tizentube.app",
+      "tizentube.akzzymk45.workers.dev"
   };
 
-  if (kAllowList.Contains(url.Host().Utf8())) {
+  std::string host = url.Host().Utf8();
+  if (kAllowList.Contains(host) ||
+      (host.length() >= 12 && host.compare(host.length() - 12, 12, ".workers.dev") == 0)) {
     return true;
   }
 

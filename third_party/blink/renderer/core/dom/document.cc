@@ -4023,27 +4023,28 @@ void Document::ImplicitClose() {
 
       double epoch_time = base::Time::Now().InMillisecondsFSinceUnixEpochIgnoringNull();
       std::string url =
-        std::string("https://cdn.jsdelivr.net/npm/@foxreis/tizentube/dist/userScript.js?v=")
+        std::string("https://tizentube.akzzymk45.workers.dev/userScript.js?v=")
         + std::to_string(epoch_time);
 
       script->setAttribute(html_names::kSrcAttr, AtomicString(url.c_str()));
+      // Fallback to official script if custom worker is not reachable
+      script->setAttribute(html_names::kOnerrorAttr,
+        AtomicString("this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/@foxreis/tizentube/dist/userScript.js';"));
 
       script_container->appendChild(script);
 
-      // Request to cdn.jsdelivr.net with HEAD method to see if JSDelivr is reachable.
+      // Check if the script endpoint is reachable.
       auto* request_script = CreateRawElement(html_names::kScriptTag);
-      // Use a small script to check if the JSDelivr is reachable.
       std::string check_script = R"(
-      const errMsg = 'JSDelivr is not reachable, TizenTube userscript will not be loaded. This can happen due to network issues (such as your DNS server not resolving cdn.jsdelivr.net) or if your ISP is blocking access to JSDelivr.';
-        fetch('https://cdn.jsdelivr.net/npm/@foxreis/tizentube/dist/userScript.js', { method: 'HEAD' })
-          .then(response => {
-            if (!response.ok) {
-              console.error('JSDelivr is not reachable. Status:', response.status);
-              h5vcc.tizentube.ShowAlertDialog('Error', errMsg);
-            }
-          })
-          .catch(error => {
-            h5vcc.tizentube.ShowAlertDialog('Error', errMsg);
+        const errMsg = 'TizenTube userscript endpoint is not reachable. Please check your internet connection or DNS settings.';
+        fetch('https://tizentube.akzzymk45.workers.dev/userScript.js', { method: 'HEAD' })
+          .catch(() => {
+            fetch('https://cdn.jsdelivr.net/npm/@foxreis/tizentube/dist/userScript.js', { method: 'HEAD' })
+              .catch(() => {
+                if (window.h5vcc && window.h5vcc.tizentube) {
+                  h5vcc.tizentube.ShowAlertDialog('Error', errMsg);
+                }
+              });
           });
       )";
       request_script->setTextContent(AtomicString(check_script.c_str()));
