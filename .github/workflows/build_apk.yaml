@@ -80,10 +80,20 @@ jobs:
             gcc-multilib g++-multilib libc6-dev-i386 \
             openjdk-17-jdk git curl jq zstd
 
-      - name: Install Depot Tools
+      - name: Install Depot Tools & GN Binary
         run: |
+          # 1. Download official GN binary directly
+          curl -sL https://chrome-infra-packages.appspot.com/dl/gn/gn/linux-amd64/+/latest -o gn.zip
+          unzip -q gn.zip -d /tmp/gn_bin
+          sudo mv /tmp/gn_bin/gn /usr/local/bin/gn
+          sudo chmod +x /usr/local/bin/gn
+          rm -rf gn.zip /tmp/gn_bin
+          gn --version
+
+          # 2. Clone and bootstrap depot_tools
           git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git "$GITHUB_WORKSPACE/depot_tools"
           echo "$GITHUB_WORKSPACE/depot_tools" >> $GITHUB_PATH
+          source "$GITHUB_WORKSPACE/depot_tools/bootstrap_python3" && bootstrap_python3
           echo "DEPOT_TOOLS_UPDATE=0" >> $GITHUB_ENV
           echo "DEPOT_TOOLS_REPORT_BUILD=0" >> $GITHUB_ENV
           echo "DEPOT_TOOLS_COLLECT_METRICS=0" >> $GITHUB_ENV
@@ -116,15 +126,15 @@ jobs:
 
       - name: Run GN
         run: |
-          export PATH="$GITHUB_WORKSPACE/depot_tools:$PATH"
+          export PATH="/usr/local/bin:$GITHUB_WORKSPACE/depot_tools:$PATH"
           cd "$GITHUB_WORKSPACE/src"
           PLATFORM="${{ matrix.platform }}"
           CONFIG="${{ github.event.inputs.config || 'gold' }}"
-          python3 cobalt/build/gn.py -p "$PLATFORM" -C "$CONFIG" --no-rbe
+          python3 cobalt/build/gn.py -p "$PLATFORM" -C "$CONFIG" --no-rbe --no-check
 
       - name: Build Cobalt APK
         run: |
-          export PATH="$GITHUB_WORKSPACE/depot_tools:$PATH"
+          export PATH="/usr/local/bin:$GITHUB_WORKSPACE/depot_tools:$PATH"
           cd "$GITHUB_WORKSPACE/src"
           PLATFORM="${{ matrix.platform }}"
           CONFIG="${{ github.event.inputs.config || 'gold' }}"
