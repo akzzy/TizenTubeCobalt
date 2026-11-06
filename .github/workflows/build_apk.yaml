@@ -107,13 +107,22 @@ jobs:
 
       - name: Ensure Android Debug Keystore
         run: |
+          mkdir -p /tmp/keystore
           if [ ! -f "$HOME/.android/debug.keystore" ]; then
-            mkdir -p "$HOME/.android"
-            keytool -genkey -v -keystore "$HOME/.android/debug.keystore" \
+            keytool -genkey -v -keystore "/tmp/keystore/debug.keystore" \
               -storepass android -alias androiddebugkey -keypass android \
               -keyalg RSA -keysize 2048 -validity 10000 \
               -dname "CN=Android Debug,O=Android,C=US"
+          else
+            cp "$HOME/.android/debug.keystore" "/tmp/keystore/debug.keystore"
           fi
+
+          # Place debug.keystore in all directory levels so relative path resolution (../../../../.android/debug.keystore) always succeeds
+          for dir in "$HOME/.android" "$GITHUB_WORKSPACE/../.android" "$GITHUB_WORKSPACE/.android" "$GITHUB_WORKSPACE/src/.android"; do
+            mkdir -p "$dir"
+            cp "/tmp/keystore/debug.keystore" "$dir/debug.keystore"
+            echo "Keystore placed at: $dir/debug.keystore"
+          done
 
       - name: Setup gclient & Sync Hooks
         run: |
@@ -138,6 +147,11 @@ jobs:
           cd "$GITHUB_WORKSPACE/src"
           PLATFORM="${{ matrix.platform }}"
           CONFIG="${{ github.event.inputs.config || 'gold' }}"
+          # Guarantee keystore path resolution from ninja out directory
+          mkdir -p "out/${PLATFORM}_${CONFIG}/../../../../.android"
+          if [ -f /tmp/keystore/debug.keystore ]; then
+            cp /tmp/keystore/debug.keystore "out/${PLATFORM}_${CONFIG}/../../../../.android/debug.keystore"
+          fi
           ninja -C "out/${PLATFORM}_${CONFIG}" cobalt_apk
 
       - name: Rename and Prepare APK Artifact
