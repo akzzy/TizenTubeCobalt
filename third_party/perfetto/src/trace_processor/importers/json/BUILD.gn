@@ -23,6 +23,7 @@ source_set("minimal") {
   deps = [
     "../../../../gn:default_deps",
     "../../storage",
+    "../../tables",
     "../common",
   ]
   if (enable_perfetto_trace_processor_json) {

@@ -21,6 +21,9 @@ source_set("storage") {
     "trace_storage.cc",
     "trace_storage.h",
   ]
+  public_deps = [
+    "../tables",
+  ]
   deps = [
     "../../../gn:default_deps",
     "../../../include/perfetto/ext/base",
@@ -28,7 +31,6 @@ source_set("storage") {
     "../containers",
     "../db:minimal",
     "../db/column",
-    "../tables",
     "../types",
   ]
 }

@@ -6,12 +6,12 @@ on:
       platform:
         description: 'Target Architecture'
         required: true
-        default: 'both'
+        default: 'android-arm'
         type: choice
         options:
-          - both
           - android-arm
           - android-arm64
+          - both
       config:
         description: 'Build Configuration'
         required: true
@@ -35,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: ${{ (github.event.inputs.platform == 'android-arm' && fromJSON('["android-arm"]')) || (github.event.inputs.platform == 'android-arm64' && fromJSON('["android-arm64"]')) || fromJSON('["android-arm", "android-arm64"]') }}
+        platform: ${{ (github.event.inputs.platform == 'both' && fromJSON('["android-arm", "android-arm64"]')) || (github.event.inputs.platform == 'android-arm64' && fromJSON('["android-arm64"]')) || fromJSON('["android-arm"]') }}
 
     steps:
       - name: Free Disk Space

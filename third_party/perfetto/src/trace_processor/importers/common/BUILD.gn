@@ -81,6 +81,8 @@ source_set("common") {
     ":trace_parser_hdr",
     "../../util:proto_to_args_parser",
     "../../util:protozero_to_text",
+    "../../storage",
+    "../../tables:tables",
   ]
   deps = [
     ":parser_types",
@@ -94,8 +96,6 @@ source_set("common") {
     "../../../protozero",
     "../../containers",
     "../../db:minimal",
-    "../../storage",
-    "../../tables:tables",
     "../../types",
     "../../util:build_id",
     "../../util:profiler_util",
