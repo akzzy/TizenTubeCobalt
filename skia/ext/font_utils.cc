@@ -18,7 +18,9 @@
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "third_party/skia/include/ports/SkFontMgr_android.h"
+#if !BUILDFLAG(IS_COBALT)
 #include "third_party/skia/include/ports/SkFontScanner_Fontations.h"
+#endif
 #endif
 
 #if BUILDFLAG(IS_APPLE)
@@ -28,7 +30,9 @@
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
 #include "third_party/skia/include/ports/SkFontConfigInterface.h"
 #include "third_party/skia/include/ports/SkFontMgr_FontConfigInterface.h"
+#if !BUILDFLAG(IS_COBALT)
 #include "third_party/skia/include/ports/SkFontScanner_Fontations.h"
+#endif
 #endif
 
 #if BUILDFLAG(IS_FUCHSIA)
@@ -86,23 +90,22 @@ static sk_sp<SkFontMgr> fontmgr_factory() {
       custom_fonts.fFontsXml = xml_path.c_str();
       custom_fonts.fFallbackFontsXml = nullptr;
       custom_fonts.fIsolated = true;
-      if (base::FeatureList::IsEnabled(skia::kFontationsAndroidSystemFonts)) {
-        return SkFontMgr_New_Android(&custom_fonts, SkFontScanner_Make_Fontations());
-      } else {
-        return SkFontMgr_New_Android(&custom_fonts);
-      }
+      return SkFontMgr_New_Android(&custom_fonts);
     }
   }
-#endif // BUILDFLAG (IS_COBALT)
+  return SkFontMgr_New_Android(nullptr);
+#else
   if (base::FeatureList::IsEnabled(skia::kFontationsAndroidSystemFonts)) {
     return SkFontMgr_New_Android(nullptr, SkFontScanner_Make_Fontations());
   } else {
     return SkFontMgr_New_Android(nullptr);
   }
+#endif // BUILDFLAG(IS_COBALT)
 #elif BUILDFLAG(IS_APPLE)
   return SkFontMgr_New_CoreText(nullptr);
 #elif BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
   sk_sp<SkFontConfigInterface> fci(SkFontConfigInterface::RefGlobal());
+#if !BUILDFLAG(IS_COBALT)
   if (base::FeatureList::IsEnabled(skia::kFontationsLinuxSystemFonts)) {
     return fci ? SkFontMgr_New_FCI(std::move(fci),
                                    SkFontScanner_Make_Fontations())
@@ -110,6 +113,9 @@ static sk_sp<SkFontMgr> fontmgr_factory() {
   } else {
     return fci ? SkFontMgr_New_FCI(std::move(fci)) : nullptr;
   }
+#else
+  return fci ? SkFontMgr_New_FCI(std::move(fci)) : nullptr;
+#endif
 #elif BUILDFLAG(IS_FUCHSIA)
   fuchsia::fonts::ProviderSyncPtr provider;
   base::ComponentContextForProcess()->svc()->Connect(provider.NewRequest());
